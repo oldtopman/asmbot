@@ -21,7 +21,7 @@ define(`SYSCALL',
 	`PUSHPARAMS(REVERSE(shift($@)))
 	movl	`$'$1, %eax
 	pushl	%eax
-	int	`$'0x80
+	//int	`$'0x80
 	addl	`$'eval(4 * ($#)),%esp')
 
 .data
