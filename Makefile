@@ -18,3 +18,6 @@ exit64.o: exit64.spp
 
 exit64.spp: exit64.s
 	clang -E exit64.s -o exit64.spp
+	
+conntest: conntest.S
+	clang conntest.S -o conntest -Wall -Wextra
