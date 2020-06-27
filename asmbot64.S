@@ -82,7 +82,7 @@ logfile:	.asciz	"asmbot64.log"
 //tcp_nodelay:	.quad	1
 
 // the next few var is the sockaddr
-sin_len:	.byte	16		// sizeof(sockaddr_in)
+sin_len:	.quad	16		// sizeof(sockaddr_in)
 sin_family:	.short	2		// AF_INET
 sin_port:	.short	0x5a1e		// htons(7770)
 sin_addr:	.long	0xc0a8007b	// htonl(192.168.0.123)
@@ -147,7 +147,9 @@ fatal:
 mksocket:
 	syscall_socket $2, $1, $0 //socket PF_INET, SOCK_STREAM, 0
 	movq	%rax, sock(%rip)
-	syscall_connect sock(%rip), sin_family(%rip), $16
+	movq	sin_len(%rip), %r9
+	leaq	sin_family(%rip), %r10
+	syscall_connect sock(%rip), %r10, %r9
 	ret
 
 // Open a log file and store a file descriptor in a global variable logfd
