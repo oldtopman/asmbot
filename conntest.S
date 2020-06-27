@@ -55,7 +55,7 @@ sin_family:	.byte	2		// AF_INET
 //sin_port:	.short	0x1092		// htons(4242)
 //sin_addr:	.long	0xc0a8007b	// htonl(192.168.0.123)
 sin_port:	.short	0x1010		// htons(4112)
-sin_addr:	.long	0x010000ac	// htonl(172.0.0.1)
+sin_addr:	.long	0x0100007f	// htonl(127.0.0.1)
 zero:		.quad	0		//zero...
 
 // strings
@@ -81,9 +81,6 @@ mksocket:
 	//put a pointer to the struct in the argument
 	leaq	sin_len(%rip), %r10
 	syscall_connect sock(%rip), %r10, %r9
-	
-	//put the struct in the argument
-	//syscall_connect sock(%rip), sin_len(%rip), %r9 //struct directly
 	
 	//see if the connection worked
 	or	%rax, %rax
