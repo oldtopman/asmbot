@@ -15,12 +15,21 @@
 // functions preserve rbx, rsp, rbp, r12, r13, r14, and r15
 // functions can modify rax, rdi, rsi, rdx, rcx, r8, r9, r10, and r11
 
-//osx syscall reference https://opensource.apple.com/source/xnu/xnu-6153.81.5/bsd/kern/syscalls.master.auto.html
+//macOS syscall reference https://opensource.apple.com/source/xnu/xnu-6153.81.5/bsd/kern/syscalls.master.auto.html
 
 //void exit(int rval);
 .macro syscall_exit rval:req
 	movq \rval, %rdi
 	movq $0x2000001, %rax
+	syscall
+.endm
+
+//user_ssize_t read(int fd, user_addr_t cbuf, user_size_t nbyte)
+.macro syscall_read fd:req cbuf:req nbyte:req
+	movq \fd, %rdi
+	movq \cbuf, %rsi
+	movq \nbyte, %rdx
+	movq $0x2000003, %rax
 	syscall
 .endm
 
@@ -33,105 +42,165 @@
 	syscall
 .endm
 
+//int open(user_addr_t path, int flags, int mode)
+.macro syscall_open path:req flags:req mode:req
+	movq \path, %rdi
+	movq \flags, %rsi
+	movq \mode, %rdx
+	movq $0x2000005, %rax
+	syscall
+.endm
+
+//int socket(int domain, int type, int protocol)
+.macro syscall_socket domain:req type:req protocol:req
+	movq \domain, %rdi
+	movq \type, %rsi
+	movq \protocol, %rdx
+	movq $0x2000061, %rax
+	syscall
+.endm
+
+//int connect(int s, caddr_t name, socklen_t namelen)
+.macro syscall_connect s:req name:req namelen:req
+	movq \s, %rdi
+	movq \name, %rsi
+	movq \namelen, %rdx
+	movq $0x2000062, %rax
+	syscall
+.endm
 
 .section __DATA,__data
+rsp_canary:	.quad	0
 debug_retval:	.quad	42
-sock:		.long	0
-logfd:		.long	0
-usagestr:	.asciz	"usage:\nasmbot [server_ip [port]]\n"
+sock:		.quad	0
+logfd:		.quad	0
+usagestr:	.asciz	"usage:\nasmbot\n"
 fatalstr:	.asciz	"fatal error occured\n"
-logfile:	.asciz	"asmbot.log"
-tcp_nodelay:	.long	1
+canarystr:	.asciz	"fatal: Stack leak occurred\n"
+debugstr:	.asciz	"zzazz\n"
+logfile:	.asciz	"asmbot64.log"
+//tcp_nodelay:	.quad	1
 
 // the next few var is the sockaddr
 sin_len:	.byte	16		// sizeof(sockaddr_in)
-sin_family:	.byte	2		// AF_INET
-sin_port:	.short	0x0b1a		// htons(6667)
-in_addr:	.long	0x116813c3	// htonl(195.19.104.17), irc.tambov.ru
-sin_addr:	.long	0xc3136811	// htonl(195.19.104.17), irc.tambov.ru
+sin_family:	.short	2		// AF_INET
+sin_port:	.short	0x5a1e		// htons(7770)
+sin_addr:	.long	0xc0a8007b	// htonl(192.168.0.123)
+sin_zero:	.long	0		// zero
 
 // IRC commands
-cmd_user:	.asciz	"user asmbot asmbot asmbot asmbot\r\n"
-cmd_nick:	.asciz	"nick asmbot\r\n"
+cmd_user:	.asciz	"user asmbot64 asmbot64 asmbot64 asmbot64\r\n"
+cmd_nick:	.asciz	"nick asmbot64\r\n"
 cmd_join:	.asciz	"join #c\r\n"
 cmd_pong:	.asciz	"PONG irc.tambov.ru\r\n"
 
 .comm	ibuf,	512  // Maximum message length defined by IRC protocol
 .comm	obuf,	512
 
+.section __TEXT,__text
+
+canary_failure:
+	syscall_write $1, canarystr@GOTPCREL(%rip), $27
+	syscall_exit $3
+	ret
+	
+test_string:
+	movq %rsp, rsp_canary(%rip)
+	
+	pushq	debugstr@GOTPCREL(%rip)
+	call	strlen
+	syscall_write $1, debugstr@GOTPCREL(%rip), %rax
+	addq	$4, %rsp
+	
+	cmpq rsp_canary(%rip), %rsp
+	jne canary_failure
+	ret
+	
 
 // return string len. string ptr is pushed to stack
 strlen:
-	//pushl	%edi
-	movl	8(%esp), %edi
-	xorl	%eax, %eax
+	pushq	%rdi
+	movq	16(%rsp), %rdi
+	xorq	%rax, %rax
 1:
-	cmpb	$0, (%edi, %eax)
+	cmpb	$0, (%rdi, %rax)
 	jz	2f
-	incl	%eax
+	incq	%rax
 	jmp	1b
 2:
-	//popl	%edi
+	popq	%rdi
 	ret	$4
 	
 	
 fatal:
-	//pushl	%edx
-	movl	8(%esp), %edx
-	//pushl	%edx	
+	pushq	%rdx
+	movq	16(%rsp), %rdx
+	pushq	%rdx
 	call	strlen
-	//SYSCALL(SYS_write, $1, %edx, %eax)
-	//SYSCALL(SYS_exit, $1)	
-	//popl	%edx
+	syscall_write $1, %rdx, %rax
+	syscall_exit $1
+	popq	%rdx
 	ret
-	
 
 // Create socket, and connect it to a server. socket stored in the
 // global variable sock
 mksocket:
-	//SYSCALL(SYS_socket, $2, $1, $0)  // socket(PF_INET, SOCK_STREAM, 0)
-	//movl	%eax, sock
-	//SYSCALL(SYS_connect, sock, $sin_len, $16)  // connect
+	syscall_socket $2, $1, $0 //socket PF_INET, SOCK_STREAM, 0
+	movq	%rax, sock(%rip)
+	syscall_connect sock(%rip), sin_family(%rip), $16
 	ret
 
 // Open a log file and store a file descriptor in a global variable logfd
 initlog:
 	// open(logfile, O_WRONLY | O_APPEND | O_CREAT, 0644)
-	//SYSCALL(SYS_open, $logfile, $(0x1 | 0x8 | 0x200), $0644)
-	//movl	%eax, logfd
+	syscall_open logfile(%rip), $(0x1 | 0x8 | 0x200), $0644
+	movq	%rax, logfd(%rip)
 	ret
 
 // Connect to the IRC server, join the channel
-login:
-	//pushl	$cmd_user
+irc_login:
+	movq %rsp, rsp_canary(%rip)
+	
+	pushq	cmd_user@GOTPCREL(%rip)
 	call	strlen
-	//SYSCALL(SYS_write, sock, $cmd_user, %eax);
-	//pushl	$cmd_nick
+	syscall_write sock(%rip), cmd_user@GOTPCREL(%rip), %rax
+	addq	$4, %rsp
+	
+	pushq	cmd_nick@GOTPCREL(%rip)
 	call	strlen
-	//SYSCALL(SYS_write, sock, $cmd_nick, %eax);
-	//SYSCALL(SYS_read, sock, $ibuf, $2048)
-	//pushl	$cmd_join
+	syscall_write sock(%rip), cmd_nick@GOTPCREL(%rip), %rax
+	addq	$4, %rsp
+	
+	syscall_read sock(%rip), ibuf(%rip), $2048
+	
+	pushq	cmd_join@GOTPCREL(%rip)
 	call	strlen
-	//SYSCALL(SYS_write, sock, $cmd_join, %eax);
+	syscall_write sock(%rip), cmd_join@GOTPCREL(%rip), %rax
+	syscall_write $1, debugstr@GOTPCREL(%rip), $6
+	addq	$4, %rsp
+	
+	cmpq rsp_canary(%rip), %rsp
+	jne canary_failure
 	ret
 
 // Infinite main loop
 loop:
 2:
-	//SYSCALL(SYS_read, sock, $ibuf, $2048)  // read(sock, ibuf, 2048)
-	cmpl	$0, %eax
+	syscall_exit $42
+	syscall_write $1, debugstr@GOTPCREL(%rip), $6
+	syscall_read sock(%rip), ibuf(%rip), $2048 //read sock, ibuf, 2048
+	cmpq	$0, %rax
 	jg	1f
-	//pushl	$fatalstr
+	pushq	fatalstr@GOTPCREL(%rip)
 	call	fatal
 	jmp	2b
 1:
 	// is it a server PING ?
-	//cmpl	$0x474e4950, ibuf
+	cmpl	$0x474e4950, ibuf(%rip)
 	jne	3f
 	// yes, send a response
-	//pushl	$cmd_pong
+	pushq	cmd_pong@GOTPCREL(%rip)
 	call	strlen
-	//SYSCALL(SYS_write, sock, $cmd_pong, %eax);
 	syscall_write sock(%rip), cmd_pong(%rip), %rax
 	jmp	2b
 3:
@@ -139,19 +208,19 @@ loop:
 	jmp	2b
 
 // The entry point
-.section __TEXT,__text
 .globl _main
 _main:
-	syscall_exit debug_retval(%rip) //make sure we don't get bus errors before exiting
-	//popl	%eax
-	//popl	%eax
-	//decl	%eax   // argc == 1 ?
-	jz	1f
+	popq	%rax
+	popq	%rax
+	jz	1f //make sure argc is zero
+	syscall_exit $2 //extra argument received, error
 	
 	// TODO: handle command-line arguments here
 	
 1:
+	call	test_string
 	call	initlog
 	call	mksocket
-	call	login
+	call	irc_login
+	syscall_write $1, debugstr@GOTPCREL(%rip), $6
 	call	loop

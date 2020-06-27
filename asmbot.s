@@ -36,7 +36,6 @@ tcp_nodelay:	.long	1
 sin_len:	.byte	16		// sizeof(sockaddr_in)
 sin_family:	.byte	2		// AF_INET
 sin_port:	.short	0x0b1a		// htons(6667)
-//sin_addr:	.long	0x116813c3	// htonl(195.19.104.17), irc.tambov.ru
 sin_addr:	.long	0xc3136811	// htonl(195.19.104.17), irc.tambov.ru
 
 // IRC commands
