@@ -7,6 +7,9 @@ asmbot.spp: asmbot.s
 	#clang -E asmbot.s -o asmbot.spp
 	cpp -P -C asmbot.s | m4 > asmbot.spp
 
+asmbot64: asmbot64.S
+	clang asmbot64.S -o asmbot64 -Wall -Wextra
+	
 exit64: exit64.o
 	ld exit64.o -e _main -o exit64 -macosx_version_min 10.13 -lSystem
 

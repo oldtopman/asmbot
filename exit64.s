@@ -9,6 +9,13 @@
 .section __DATA,__data
 str:
   .asciz TEXT_STR
+  
+//void exit(int rval);
+.macro syscall_exit rval:req
+	movq \rval, %rdi
+	movq $0x2000001, %rax
+	syscall
+.endm
 
 .section __TEXT,__text
 .globl _main
@@ -19,6 +26,4 @@ _main:
   movq $100, %rdx                 # the size of the value to print
   syscall
 
-  movq $0, %rdi
-  movq $0x2000001, %rax           # exit 0
-  syscall
+  syscall_exit $0
