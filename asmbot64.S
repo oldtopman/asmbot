@@ -124,8 +124,7 @@ fatal:
 mksocket:
 	syscall_socket $2, $1, $0 //socket PF_INET, SOCK_STREAM, 0
 	movq	%rax, sock(%rip)
-	leaq	sin_len(%rip), %r10
-	syscall_connect sock(%rip), %r10, $16
+	syscall_connect sock(%rip), sin_len@GOTPCREL(%rip), $16
 	or	%rax, %rax
 	jz	1f
 	syscall_exit $2
@@ -151,9 +150,7 @@ irc_login:
 	syscall_write sock(%rip), cmd_nick@GOTPCREL(%rip), %rax
 	addq	$4, %rsp
 	
-	//wait for something from the server???
-	leaq	ibuf(%rip), %r10
-	syscall_read sock(%rip), %r10, $512
+	syscall_read sock(%rip), ibuf@GOTPCREL(%rip), $512
 	
 	pushq	cmd_join@GOTPCREL(%rip)
 	call	strlen
@@ -164,8 +161,7 @@ irc_login:
 // Infinite main loop
 irc_loop:
 2:
-	leaq	ibuf(%rip), %r10
-	syscall_read sock(%rip), %r10, $2048 //read sock, ibuf, 2048
+	syscall_read sock(%rip), ibuf@GOTPCREL(%rip), $2048 //read sock, ibuf, 2048
 	cmpq	$0, %rax
 	jg	1f
 	pushq	fatalstr@GOTPCREL(%rip)
@@ -181,8 +177,7 @@ irc_loop:
 	syscall_write sock(%rip), cmd_pong@GOTPCREL(%rip), %rax
 	jmp	2b
 3:
-	leaq	ibuf(%rip), %r10
-	syscall_write logfd(%rip), %r10, %rax // write to logfile
+	syscall_write logfd(%rip), ibuf@GOTPCREL(%rip), %rax // write to logfile
 	jmp	2b
 
 // The entry point
