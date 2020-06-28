@@ -161,7 +161,7 @@ irc_login:
 // Infinite main loop
 irc_loop:
 2:
-	syscall_read sock(%rip), ibuf@GOTPCREL(%rip), $2048 //read sock, ibuf, 2048
+	syscall_read sock(%rip), ibuf@GOTPCREL(%rip), $512 //read sock, ibuf, 2048
 	cmpq	$0, %rax
 	jg	1f
 	pushq	fatalstr@GOTPCREL(%rip)
