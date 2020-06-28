@@ -1,0 +1,5 @@
+asmbot originally written by Sergey Lyubka
+asmbot64 update provided by oldtopman
+
+see makefile for building instructions
+update performed on macOS 10.15, clang 11.0.3

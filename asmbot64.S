@@ -1,11 +1,9 @@
-// Copyright (c) 2002 Sergey Lyubka
-//
+// Original version Copyright (c) 2002 Sergey Lyubka
+// 64-bit update changes Copyright (c) 2020 oldtopman
 // Simple IRC bot in x64 assembly, written for MacOS.
 // Compilation: See makefile
 //
 // To port to Linux, change syscall* macros.
-
-//Ported to macOS 10.15 and 64 bit by oldtopman
 
 
 //sysv calling convention:
