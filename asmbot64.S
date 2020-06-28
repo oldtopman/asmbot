@@ -7,7 +7,6 @@
 
 //Ported to macOS 10.15 and 64 bit by oldtopman
 
-//#include <sys/syscall.h>
 
 //sysv calling convention:
 // arguments rdi, rsi, rdx, rcx, r8, r9, then stack
@@ -70,30 +69,20 @@
 .endm
 
 .section __DATA,__data
-rsp_canary:	.quad	0
-debug_retval:	.quad	42
 sock:		.quad	0
 logfd:		.quad	0
 usagestr:	.asciz	"usage:\nasmbot\n"
 fatalstr:	.asciz	"fatal error occured\n"
-canarystr:	.asciz	"fatal: Stack leak occurred\n"
-debugstr:	.asciz	"zzazz\n"
-logfile:	.asciz	"asmbot64.log"
+logfile:	.asciz	"asmbot64.log\0"
 //tcp_nodelay:	.quad	1
 
-// the next few var is the sockaddr
-//struct sockaddr {
-//__uint8_t       sa_len;         /* total length */
-//sa_family_t     sa_family;      /* [XSI] address family */
-//char            sa_data[14];    /* [XSI] addr value (actually larger) */
-//};
+//sockaddr_in
 sin_len:	.byte	16		// sizeof(sockaddr_in)
 sin_family:	.byte	2		// AF_INET
-//sin_port:	.short	0x1092		// htons(4242)
-//sin_addr:	.long	0xc0a8007b	// htonl(192.168.0.123)
-sin_port:	.short	0x1010		// htons(4112)
-sin_addr:	.long	0x010000ac	// htonl(172.0.0.1)
-zero:		.quad	0		//zero...
+sin_port:	.short	0x5a1e		// htons(7770)
+//sin_addr:	.long	0x0ec685c3	// htonl(195.133.198.14) irc.tambov.ru
+sin_addr:	.long	0x0100007f	// htonl(127.0.0.1)
+sin_zero:	.quad	0		//zero...
 
 // IRC commands
 cmd_user:	.asciz	"user asmbot64 asmbot64 asmbot64 asmbot64\r\n"
@@ -102,27 +91,8 @@ cmd_join:	.asciz	"join #c\r\n"
 cmd_pong:	.asciz	"PONG irc.tambov.ru\r\n"
 
 .comm	ibuf,	512  // Maximum message length defined by IRC protocol
-.comm	obuf,	512
 
 .section __TEXT,__text
-
-canary_failure:
-	syscall_write $1, canarystr@GOTPCREL(%rip), $27
-	syscall_exit $3
-	ret
-	
-test_string:
-	movq %rsp, rsp_canary(%rip)
-	
-	pushq	debugstr@GOTPCREL(%rip)
-	call	strlen
-	syscall_write $1, debugstr@GOTPCREL(%rip), %rax
-	addq	$4, %rsp
-	
-	cmpq rsp_canary(%rip), %rsp
-	jne canary_failure
-	ret
-	
 
 // return string len. string ptr is pushed to stack
 strlen:
@@ -156,20 +126,21 @@ mksocket:
 	movq	%rax, sock(%rip)
 	leaq	sin_len(%rip), %r10
 	syscall_connect sock(%rip), %r10, $16
-	//syscall_connect sock(%rip), sin_len(%rip), $16
+	or	%rax, %rax
+	jz	1f
+	syscall_exit $2
+1:
 	ret
 
 // Open a log file and store a file descriptor in a global variable logfd
 initlog:
 	// open(logfile, O_WRONLY | O_APPEND | O_CREAT, 0644)
-	syscall_open logfile(%rip), $(0x1 | 0x8 | 0x200), $0644
+	syscall_open logfile@GOTPCREL(%rip), $(0x1 | 0x8 | 0x200), $0644
 	movq	%rax, logfd(%rip)
 	ret
 
 // Connect to the IRC server, join the channel
 irc_login:
-	movq %rsp, rsp_canary(%rip)
-	
 	pushq	cmd_user@GOTPCREL(%rip)
 	call	strlen
 	syscall_write sock(%rip), cmd_user@GOTPCREL(%rip), %rax
@@ -180,24 +151,21 @@ irc_login:
 	syscall_write sock(%rip), cmd_nick@GOTPCREL(%rip), %rax
 	addq	$4, %rsp
 	
-	syscall_read sock(%rip), ibuf(%rip), $2048
+	//wait for something from the server???
+	leaq	ibuf(%rip), %r10
+	syscall_read sock(%rip), %r10, $512
 	
 	pushq	cmd_join@GOTPCREL(%rip)
 	call	strlen
 	syscall_write sock(%rip), cmd_join@GOTPCREL(%rip), %rax
-	syscall_write $1, debugstr@GOTPCREL(%rip), $6
 	addq	$4, %rsp
-	
-	cmpq rsp_canary(%rip), %rsp
-	jne canary_failure
 	ret
 
 // Infinite main loop
-loop:
+irc_loop:
 2:
-	syscall_exit $42
-	syscall_write $1, debugstr@GOTPCREL(%rip), $6
-	syscall_read sock(%rip), ibuf(%rip), $2048 //read sock, ibuf, 2048
+	leaq	ibuf(%rip), %r10
+	syscall_read sock(%rip), %r10, $2048 //read sock, ibuf, 2048
 	cmpq	$0, %rax
 	jg	1f
 	pushq	fatalstr@GOTPCREL(%rip)
@@ -210,10 +178,11 @@ loop:
 	// yes, send a response
 	pushq	cmd_pong@GOTPCREL(%rip)
 	call	strlen
-	syscall_write sock(%rip), cmd_pong(%rip), %rax
+	syscall_write sock(%rip), cmd_pong@GOTPCREL(%rip), %rax
 	jmp	2b
 3:
-	syscall_write logfd(%rip), ibuf(%rip), %rax // write to logfile
+	leaq	ibuf(%rip), %r10
+	syscall_write logfd(%rip), %r10, %rax // write to logfile
 	jmp	2b
 
 // The entry point
@@ -227,9 +196,7 @@ _main:
 	// TODO: handle command-line arguments here
 	
 1:
-	call	test_string
 	call	initlog
 	call	mksocket
 	call	irc_login
-	syscall_write $1, debugstr@GOTPCREL(%rip), $6
-	call	loop
+	call	irc_loop
